@@ -1,15 +1,31 @@
 import requests
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Prompt user to enter the base URL and total number of subtitle files
-base_url = input("Enter the base URL (e.g., https://devstreaming-cdn.apple.com/videos/wwdc/2024/10173/4/xx-xx-xx-xx-xx/subtitles/eng/sequence_0.webvtt): ")
-count = int(input("Enter the total number of subtitle files: "))
+def get_valid_base_url():
+    while True:
+        base_url_str = input("Enter the base URL (e.g., https://devstreaming-cdn.apple.com/videos/wwdc/2024/10173/4/xx-xx-xx-xx-xx/subtitles/eng/sequence_0.webvtt): ").strip()
+        if base_url_str.endswith(".webvtt"):
+            return base_url_str
+        else:
+            print("The entered URL is incorrect. Ensure it ends with .webvtt. Please try again.")
 
-# Confirm the correct ending for the base URL
-if not base_url.endswith(".webvtt"):
-    print("The entered URL is incorrect. Ensure it ends with .webvtt.")
-    exit(1)
+def get_valid_count(base_url_str):
+    while True:
+        count_str = input("Enter the total number of subtitle files: ").strip()
+        try:
+            count = int(count_str)
+            if count > 0:
+                return count
+            else:
+                print("The entered total number of subtitle files must be a positive integer. Please try again.")
+        except ValueError:
+            print(f"The entered total number of subtitle files '{count_str}' is not a valid integer. Please enter a valid number.")
 
-base_url_prefix = base_url.rsplit("_", 1)[0]
+base_url_str = get_valid_base_url()
+count = get_valid_count(base_url_str)
+
+base_url_prefix = base_url_str.rsplit("_", 1)[0]
 
 # Download single subtitle file
 def download_subtitle(counter):
@@ -33,13 +49,14 @@ def download_subtitles_concurrently(count):
 
 # Merge and clean subtitles
 def merge_and_clean_subtitles(count):
-    with open("full.webvtt", "wb") as full_file:
+    with open("full.webvtt", "w", encoding='utf-8') as full_file:
         for counter in range(count):
-            with open(f"sequence_{counter}.webvtt", "rb") as file:
+            with open(f"sequence_{counter}.webvtt", "r", encoding='utf-8') as file:
                 content = file.read()
-                # Use regular expressions to remove "WEBVTT" tags and timestamp lines
-                cleaned_content = re.sub(rb'WEBVTT\n\n(\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\n)?', b'',
-                                         content)
+                # Remove timestamp lines, WEBVTT tags, and extra blank lines
+                cleaned_content = re.sub(r'(WEBVTT|\n\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3})\n', '', content)
+                # Replace multiple consecutive newlines with a single newline
+                cleaned_content = re.sub(r'\n\s*\n', '\n', cleaned_content)
                 full_file.write(cleaned_content)
             print(f"Merged sequence_{counter}.webvtt")
 
